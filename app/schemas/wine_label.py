@@ -21,6 +21,8 @@ class WineAnalysis(BaseModel):
     type: Optional[str]
     alcohol_percentage: Optional[float]
     description: Optional[str]
+    designation: Optional[str]
+    sub_region: Optional[str]
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 
@@ -48,10 +50,28 @@ class CellarWine(BaseModel):
     wine_info: WineInfo
 
 
+class WineProposal(BaseModel):
+    id: Optional[UUID] = None  # None pour nouveau vin
+    name: str
+    winery: Optional[str]
+    year: Optional[int]
+    region: Optional[str]
+    country: Optional[str]
+    variety: Optional[str]
+    type: Optional[str]
+    alcohol_percentage: Optional[float] = None
+    description: Optional[str] = None
+    designation: Optional[str] = None
+    sub_region: Optional[str] = None
+    match_type: Optional[str] = None  # Pour vin existant
+    match_confidence: float = 0.0    # Pour vin existant
+    confidence: float = 0.0          # Pour nouveau vin
+
+
 class WineLabelResponse(BaseModel):
     chat_response: str
-    wine_added: bool
-    cellar_wine: Optional[CellarWine]
+    existing_proposal: Optional[WineProposal]
+    new_proposal: WineProposal
     wine_analysis: WineAnalysis
 
 

@@ -5,3 +5,4 @@ python-dotenv==1.0.1
 pydantic==2.12.5
 supabase==2.11.0
 httpx==0.28.1
+requests==2.32.3

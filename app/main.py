@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.routers.wine_pairing import router as wine_pairing_router
 from app.routers.wine_label import router as wine_label_router
+from app.routers.wine_add import router as wine_add_router
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if not GITHUB_TOKEN:
@@ -41,6 +42,7 @@ app.add_middleware(
 
 app.include_router(wine_pairing_router)
 app.include_router(wine_label_router)
+app.include_router(wine_add_router)
 
 
 class ChatMessage(BaseModel):
