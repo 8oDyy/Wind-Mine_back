@@ -15,12 +15,13 @@ def _get_client() -> Client:
     return create_client(supabase_url, supabase_service_role_key)
 
 
-def create_signed_url(file_path: str, expires_in: int = 300) -> str:
+def create_signed_url(file_path: str, expires_in: int = 300, bucket_name: str | None = None) -> str:
     """Génère une signed URL temporaire pour un fichier dans le bucket Supabase.
 
     Args:
         file_path: Chemin du fichier dans le bucket.
         expires_in: Durée de validité en secondes (défaut 5 min).
+        bucket_name: Nom du bucket (optionnel, utilise SUPABASE_BUCKET_NAME par défaut).
 
     Returns:
         URL signée temporaire.
@@ -29,7 +30,7 @@ def create_signed_url(file_path: str, expires_in: int = 300) -> str:
         ValueError: Si le bucket n'est pas configuré.
         RuntimeError: Si la génération échoue côté Supabase.
     """
-    supabase_bucket_name = os.getenv("SUPABASE_BUCKET_NAME")
+    supabase_bucket_name = bucket_name or os.getenv("SUPABASE_BUCKET_NAME")
     if not supabase_bucket_name:
         raise ValueError("SUPABASE_BUCKET_NAME manquant dans .env")
 
