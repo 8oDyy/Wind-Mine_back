@@ -51,7 +51,7 @@ WINE_LABEL_SYSTEM_PROMPT = (
     '- points: note estimée 85-95 selon la qualité perçue\n'
     '- body_level: 0.3(léger)-0.7(medium)-0.9(puissant)\n'
     '- tannin_level: 0.2(faible)-0.6(moyen)-0.9(élevé)\n'
-    '- fruit_level: 0.3(discret)-0.7(équilibré)-0.9(puissant)\n\n"
+    '- fruit_level: 0.3(discret)-0.7(équilibré)-0.9(puissant)\n\n'
     'En cas d\'étiquette totalement illisible :\n'
     '{"error": "label_unreadable", "detail": "explication"}'
 )
