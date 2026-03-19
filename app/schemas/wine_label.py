@@ -22,7 +22,13 @@ class WineAnalysis(BaseModel):
     alcohol_percentage: Optional[float]
     description: Optional[str]
     designation: Optional[str]
-    sub_region: Optional[str]
+    province: Optional[str]
+    price: Optional[float]
+    points: Optional[int]
+    body_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    tannin_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    fruit_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    food_pairings: Optional[list[str]]
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 
@@ -62,7 +68,13 @@ class WineProposal(BaseModel):
     alcohol_percentage: Optional[float] = None
     description: Optional[str] = None
     designation: Optional[str] = None
-    sub_region: Optional[str] = None
+    province: Optional[str] = None
+    price: Optional[float] = None
+    points: Optional[int] = None
+    body_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    tannin_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    fruit_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    food_pairings: Optional[list[str]] = None
     match_type: Optional[str] = None  # Pour vin existant
     match_confidence: float = 0.0    # Pour vin existant
     confidence: float = 0.0          # Pour nouveau vin

@@ -82,7 +82,7 @@ def _clean_wine_data(wine_data: dict) -> dict:
             cleaned["confidence"] = 0.0
     
     # Nettoyer les champs textuels vides
-    text_fields = ["name", "winery", "region", "country", "variety", "type", "description", "designation", "sub_region"]
+    text_fields = ["name", "winery", "region", "country", "variety", "type", "description", "designation", "province"]
     for field in text_fields:
         if field in cleaned:
             value = cleaned[field]
@@ -90,6 +90,39 @@ def _clean_wine_data(wine_data: dict) -> dict:
                 cleaned[field] = None
             elif isinstance(value, str):
                 cleaned[field] = value.strip()
+    
+    # Nettoyer les champs numériques
+    numeric_fields = ["price", "points"]
+    for field in numeric_fields:
+        if field in cleaned:
+            value = cleaned[field]
+            try:
+                if isinstance(value, str) and value.lower() in ["non visible", "non spécifié", "n/a", ""]:
+                    cleaned[field] = None
+                else:
+                    cleaned[field] = float(value) if field == "price" else int(value)
+            except (ValueError, TypeError):
+                cleaned[field] = None
+    
+    # Nettoyer les niveaux (0.0-1.0)
+    level_fields = ["body_level", "tannin_level", "fruit_level"]
+    for field in level_fields:
+        if field in cleaned:
+            value = cleaned[field]
+            try:
+                cleaned[field] = float(value)
+                if not (0.0 <= cleaned[field] <= 1.0):
+                    cleaned[field] = 0.5  # Valeur par défaut
+            except (ValueError, TypeError):
+                cleaned[field] = 0.5
+    
+    # Nettoyer food_pairings
+    if "food_pairings" in cleaned:
+        food = cleaned["food_pairings"]
+        if isinstance(food, list):
+            cleaned["food_pairings"] = [str(item).strip() for item in food if str(item).strip()]
+        else:
+            cleaned["food_pairings"] = None
     
     return cleaned
 

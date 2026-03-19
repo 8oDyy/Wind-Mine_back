@@ -34,41 +34,51 @@ def find_similar_wine(wine_data: dict) -> tuple[Optional[dict], str]:
     region = wine_data.get("region", "").strip()
     
     try:
-        # Recherche 1: Exacte sur nom + domaine + millésime
-        if name and winery and year:
+        # Recherche 1: Nom exact (priorité absolue, ignore l'année)
+        if name:
             query = (
                 client.table("wines")
                 .select("*")
                 .eq("name", name)
-                .eq("winery", winery)
-                .eq("year", year)
-                .limit(1)
+                .limit(10)
             )
             response = query.execute()
             if response.data:
-                logger.info(f"Vin exact trouvé: {name} - {winery} {year}")
-                return response.data[0], "exact"
+                # Si winery spécifié, chercher la meilleure correspondance
+                if winery:
+                    for wine in response.data:
+                        if wine.get("winery", "").lower() == winery.lower():
+                            logger.info(f"Vin exact trouvé: {name} - {winery}")
+                            return wine, "exact"
+                    # Sinon prendre le premier avec le même nom
+                    logger.info(f"Vin trouvé par nom exact: {name}")
+                    return response.data[0], "exact"
+                else:
+                    logger.info(f"Vin trouvé par nom exact: {name}")
+                    return response.data[0], "exact"
         
-        # Recherche 2: Nom + domaine (différentes années)
-        if name and winery:
-            query = (
-                client.table("wines")
-                .select("*")
-                .eq("name", name)
-                .eq("winery", winery)
-                .limit(5)
-            )
-            response = query.execute()
-            if response.data:
-                # Chercher l'année la plus proche
-                if year:
-                    closest = min(response.data, key=lambda w: abs(w.get("year", 0) - year))
-                    logger.info(f"Vin similaire trouvé (même nom+domaine, année proche): {name} - {winery} {closest.get('year')}")
-                    return closest, "same_wine_different_year"
-                # Sinon prendre le plus récent
-                newest = max(response.data, key=lambda w: w.get("year", 0))
-                logger.info(f"Vin similaire trouvé (même nom+domaine): {name} - {winery}")
-                return newest, "same_wine_different_year"
+        # Recherche 2: Nom similaire (contient les mots clés)
+        if name:
+            name_parts = name.lower().split()
+            for part in name_parts:
+                if len(part) > 3:  # Ignorer les petits mots
+                    query = (
+                        client.table("wines")
+                        .select("*")
+                        .ilike("name", f"%{part}%")
+                        .limit(5)
+                    )
+                    response = query.execute()
+                    if response.data:
+                        # Si winery spécifié, chercher la meilleure correspondance
+                        if winery:
+                            for wine in response.data:
+                                if wine.get("winery", "").lower() == winery.lower():
+                                    logger.info(f"Vin similaire trouvé: {wine['name']} - {winery}")
+                                    return wine, "similar_name_same_winery"
+                        # Sinon prendre le premier
+                        logger.info(f"Vin similaire trouvé: {response.data[0]['name']}")
+                        return response.data[0], "similar_name"
         
         # Recherche 3: Nom similaire + même domaine
         if name and winery:
@@ -146,7 +156,13 @@ def create_wine(wine_data: dict) -> dict:
         "type": wine_data.get("type", "Rouge"),
         "description": wine_data.get("description"),
         "designation": wine_data.get("designation"),
-        "province": wine_data.get("sub_region"),  # Utiliser sub_region comme province
+        "province": wine_data.get("province"),
+        "price": wine_data.get("price"),
+        "points": wine_data.get("points"),
+        "body_level": wine_data.get("body_level", 0.5),
+        "tannin_level": wine_data.get("tannin_level", 0.5),
+        "fruit_level": wine_data.get("fruit_level", 0.5),
+        "food_pairings": wine_data.get("food_pairings"),
         "image_url": None  # Sera mis à jour plus tard si besoin
     }
     
