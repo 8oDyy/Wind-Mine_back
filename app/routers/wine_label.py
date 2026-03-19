@@ -38,6 +38,62 @@ def _get_match_confidence(match_type: str) -> float:
     return confidence_map.get(match_type, 0.0)
 
 
+def _clean_wine_data(wine_data: dict) -> dict:
+    """Nettoie les données du vin pour la validation Pydantic."""
+    cleaned = wine_data.copy()
+    
+    # Nettoyer alcohol_percentage
+    if "alcohol_percentage" in cleaned:
+        alcohol = cleaned["alcohol_percentage"]
+        if isinstance(alcohol, str):
+            if alcohol.lower() in ["non visible", "non spécifié", "n/a", ""]:
+                cleaned["alcohol_percentage"] = None
+            else:
+                try:
+                    cleaned["alcohol_percentage"] = float(alcohol.replace("%", "").strip())
+                except (ValueError, AttributeError):
+                    cleaned["alcohol_percentage"] = None
+        elif alcohol is None:
+            pass  # Garder None
+        else:
+            try:
+                cleaned["alcohol_percentage"] = float(alcohol)
+            except (ValueError, TypeError):
+                cleaned["alcohol_percentage"] = None
+    
+    # Nettoyer l'année
+    if "year" in cleaned:
+        year = cleaned["year"]
+        if isinstance(year, str):
+            if year.lower() in ["non visible", "non spécifié", "n/a", ""]:
+                cleaned["year"] = None
+            else:
+                try:
+                    cleaned["year"] = int(year)
+                except (ValueError, AttributeError):
+                    cleaned["year"] = None
+    
+    # Nettoyer la confiance
+    if "confidence" in cleaned:
+        confidence = cleaned["confidence"]
+        try:
+            cleaned["confidence"] = float(confidence)
+        except (ValueError, TypeError):
+            cleaned["confidence"] = 0.0
+    
+    # Nettoyer les champs textuels vides
+    text_fields = ["name", "winery", "region", "country", "variety", "type", "description", "designation", "sub_region"]
+    for field in text_fields:
+        if field in cleaned:
+            value = cleaned[field]
+            if isinstance(value, str) and value.lower() in ["non visible", "non spécifié", "n/a", ""]:
+                cleaned[field] = None
+            elif isinstance(value, str):
+                cleaned[field] = value.strip()
+    
+    return cleaned
+
+
 @router.post(
     "/wine-label-analysis",
     response_model=WineLabelResponse,
@@ -155,12 +211,14 @@ Choisissez l'option qui vous convient le mieux. Vous pourrez ensuite ajouter le 
 
 {chat_response}"""
 
-        # 5. Construire la réponse avec les propositions
-        wine_analysis = WineAnalysis(**wine_data)
+        # 5. Nettoyer et valider les données
+        cleaned_wine_data = _clean_wine_data(wine_data)
+        wine_analysis = WineAnalysis(**cleaned_wine_data)
         
-        # Créer les objets WineProposal
+        # Créer les objets WineProposal avec données nettoyées
         existing_proposal_obj = WineProposal(**existing_proposal) if existing_proposal else None
-        new_proposal_obj = WineProposal(**new_proposal)
+        cleaned_new_proposal = _clean_wine_data(new_proposal)
+        new_proposal_obj = WineProposal(**cleaned_new_proposal)
 
         return WineLabelResponse(
             chat_response=chat_response,
