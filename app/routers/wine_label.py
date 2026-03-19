@@ -170,8 +170,8 @@ Choisissez l'option qui vous convient le mieux. Vous pourrez ensuite ajouter le 
         )
 
     except Exception as e:
-        logger.error("Erreur traitement cave: %s", e)
+        logger.error("Erreur analyse étiquette: %s", e)
         raise HTTPException(
             status_code=500,
-            detail="Erreur lors de l'ajout du vin à votre cave",
+            detail="Erreur lors de l'analyse de l'étiquette",
         )
