@@ -58,13 +58,18 @@ WINE_LABEL_SYSTEM_PROMPT = (
 
 
 def _get_client() -> OpenAI:
+    chat_api_key = os.getenv("CHAT_API_KEY")
     github_token = os.getenv("GITHUB_TOKEN")
-    if not github_token:
-        raise RuntimeError("GITHUB_TOKEN manquant dans .env")
-    return OpenAI(
-        base_url="https://models.inference.ai.azure.com",
-        api_key=github_token,
-    )
+    
+    if chat_api_key:
+        return OpenAI(api_key=chat_api_key)
+    elif github_token:
+        return OpenAI(
+            base_url="https://models.inference.ai.azure.com",
+            api_key=github_token,
+        )
+    else:
+        raise RuntimeError("CHAT_API_KEY ou GITHUB_TOKEN manquant dans .env")
 
 
 def analyze_wine_label(image_url: str) -> dict:

@@ -9,7 +9,7 @@ import os
 from uuid import uuid4
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://10.74.16.212:8000"
 USER_ID = "2a0d4c0e-eebb-4456-a1e3-eea4f8203169"  # Ton user_id de test
 
 def test_wine_label_analysis():
