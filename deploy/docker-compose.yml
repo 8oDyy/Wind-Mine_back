@@ -1,0 +1,31 @@
+# Stack de PRODUCTION — déployée sur le VPS via GitHub Actions.
+# (Le docker-compose.yml à la racine reste la version simple pour le dev local.)
+# api : interne uniquement. caddy : seul exposé publiquement (80/443, HTTPS auto).
+name: windmind
+
+services:
+  api:
+    build:
+      context: ..            # le Dockerfile et app/ sont à la racine du repo
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ../.env        # secrets présents sur le serveur, jamais dans le repo
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -21,6 +21,14 @@ class WineAnalysis(BaseModel):
     type: Optional[str]
     alcohol_percentage: Optional[float]
     description: Optional[str]
+    designation: Optional[str]
+    province: Optional[str]
+    price: Optional[float]
+    points: Optional[int]
+    body_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    tannin_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    fruit_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    food_pairings: Optional[list[str]]
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 
@@ -48,10 +56,34 @@ class CellarWine(BaseModel):
     wine_info: WineInfo
 
 
+class WineProposal(BaseModel):
+    id: Optional[UUID] = None  # None pour nouveau vin
+    name: str
+    winery: Optional[str]
+    year: Optional[int]
+    region: Optional[str]
+    country: Optional[str]
+    variety: Optional[str]
+    type: Optional[str]
+    alcohol_percentage: Optional[float] = None
+    description: Optional[str] = None
+    designation: Optional[str] = None
+    province: Optional[str] = None
+    price: Optional[float] = None
+    points: Optional[int] = None
+    body_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    tannin_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    fruit_level: Optional[float] = Field(None, ge=0.0, le=1.0)
+    food_pairings: Optional[list[str]] = None
+    match_type: Optional[str] = None  # Pour vin existant
+    match_confidence: float = 0.0    # Pour vin existant
+    confidence: float = 0.0          # Pour nouveau vin
+
+
 class WineLabelResponse(BaseModel):
     chat_response: str
-    wine_added: bool
-    cellar_wine: Optional[CellarWine]
+    existing_proposal: Optional[WineProposal]
+    new_proposal: WineProposal
     wine_analysis: WineAnalysis
 
 

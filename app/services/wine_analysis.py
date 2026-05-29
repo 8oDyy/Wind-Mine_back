@@ -11,38 +11,65 @@ VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o")
 
 WINE_LABEL_SYSTEM_PROMPT = (
     "Tu es Paul, un sommelier virtuel expert dans l'application WineMind. "
-    "Analyse l'image de l'étiquette de vin et extrait toutes les informations importantes. "
-    "Sois précis et professionnel. Si certaines informations ne sont pas lisibles, indique-le. "
-    "Réponds uniquement en JSON valide.\n\n"
-    "Format de réponse JSON :\n"
+    "Analyse l'image de l'étiquette de vin et extrait TOUTES les informations requises pour la base de données. "
+    "Sois extrêmement précis et professionnel. Si une information n'est pas visible sur l'étiquette, "
+    "utilise tes connaissances oenologiques pour la déduire logiquement.\n\n"
+    "INSTRUCTIONS CRITIQUES :\n"
+    "- Tu dois remplir TOUS les champs ci-dessous sans exception\n"
+    "- Si une info n'est pas visible, déduis-la selon le contexte (région, type de vin, etc)\n"
+    "- Sois précis sur les appellations, cépages, et classifications\n"
+    "- Enrichis avec tes connaissances si nécessaire\n"
+    "- Pour les niveaux (body, tannin, fruit), utilise des scores 0.0-1.0\n"
+    "- Pour food_pairings, liste 3-4 accords mets-vin pertinents\n\n"
+    "Format de réponse JSON OBLIGATOIRE :\n"
     "{\n"
-    '  "chat_response": "Message conversationnel pour l\'utilisateur",\n'
+    '  "chat_response": "Message expliquant l analyse et si ce vin semble exister déjà",\n'
     '  "wine_data": {\n'
-    '    "name": "Nom exact du vin",\n'
-    '    "winery": "Nom du domaine/producteur",\n'
+    '    "name": "Nom COMPLET du vin (appellation exacte)",\n'
+    '    "winery": "Domaine/producteur exact",\n'
     '    "year": 2020,\n'
-    '    "region": "Région viticole",\n'
+    '    "region": "Région viticole précise",\n'
     '    "country": "Pays",\n'
-    '    "variety": "Cépage(s)",\n'
-    '    "type": "Rouge/Blanc/Rosé/Mousseux",\n'
+    '    "variety": "Cépage(s) principaux",\n'
+    '    "type": "Rouge/Blanc/Rosé/Mousseux/Nature/Doux",\n'
     '    "alcohol_percentage": 13.5,\n'
-    '    "description": "Description brève du vin",\n'
+    '    "description": "Description détaillée du style et arômes",\n'
+    '    "designation": "Classification (Grand Cru, Premier Cru, etc)",\n'
+    '    "province": "Sous-région ou province",\n'
+    '    "price": 25.0,\n'
+    '    "points": 92,\n'
+    '    "body_level": 0.7,\n'
+    '    "tannin_level": 0.6,\n'
+    '    "fruit_level": 0.8,\n'
+    '    "food_pairings": ["Viande rouge", "Fromage", "Champignons"],\n'
     '    "confidence": 0.95\n'
     "  }\n"
     "}\n\n"
-    'En cas d\'étiquette illisible, retourne :\n'
-    '{"error": "label_unreadable", "detail": "message expliquant pourquoi"}'
+    'DÉDUCTION SI NON VISIBLE :\n'
+    '- region_2: sous-région plus spécifique si applicable\n'
+    '- price: prix estimé selon le type et réputation\n'
+    '- points: note estimée 85-95 selon la qualité perçue\n'
+    '- body_level: 0.3(léger)-0.7(medium)-0.9(puissant)\n'
+    '- tannin_level: 0.2(faible)-0.6(moyen)-0.9(élevé)\n'
+    '- fruit_level: 0.3(discret)-0.7(équilibré)-0.9(puissant)\n\n'
+    'En cas d\'étiquette totalement illisible :\n'
+    '{"error": "label_unreadable", "detail": "explication"}'
 )
 
 
 def _get_client() -> OpenAI:
+    chat_api_key = os.getenv("CHAT_API_KEY")
     github_token = os.getenv("GITHUB_TOKEN")
-    if not github_token:
-        raise RuntimeError("GITHUB_TOKEN manquant dans .env")
-    return OpenAI(
-        base_url="https://models.inference.ai.azure.com",
-        api_key=github_token,
-    )
+    
+    if chat_api_key:
+        return OpenAI(api_key=chat_api_key)
+    elif github_token:
+        return OpenAI(
+            base_url="https://models.inference.ai.azure.com",
+            api_key=github_token,
+        )
+    else:
+        raise RuntimeError("CHAT_API_KEY ou GITHUB_TOKEN manquant dans .env")
 
 
 def analyze_wine_label(image_url: str) -> dict:
