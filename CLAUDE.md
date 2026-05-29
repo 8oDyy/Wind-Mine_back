@@ -28,7 +28,7 @@ docker compose up --build
 
 ## Configuration (.env)
 
-Variables requises (voir `.env.example`) : `CHAT_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET_NAME`, `SUPABASE_WINE_LABELS_BUCKET`, `VISION_MODEL`.
+Variables requises (voir `.env.example`) : `CHAT_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET_NAME`, `SUPABASE_WINE_LABELS_BUCKET`, `VISION_MODEL`, `SUPABASE_JWT_SECRET` (Dashboard → Settings → API → JWT Secret, legacy HS256 ; sert à vérifier les access tokens des endpoints authentifiés).
 
 **Provider LLM** : le projet utilise **OpenAI direct via `CHAT_API_KEY`**. Le code supporte aussi un fallback `GITHUB_TOKEN` (GitHub Models sur `models.inference.ai.azure.com`) mais ce n'est pas le mode utilisé. Au démarrage, `app.main` **lève une RuntimeError si aucune clé n'est présente** — c'est pourquoi `tests/test_health.py` injecte des variables factices *avant* d'importer l'app.
 
@@ -40,8 +40,9 @@ Pattern en 3 couches, une responsabilité par fichier :
 - **`app/routers/`** — un router par feature, préfixe `/api`. Orchestrent : signed URL → analyse → validation Pydantic → réponse. Toute la gestion d'erreurs HTTP vit ici (mapping RuntimeError→502, ValueError→502, config manquante→500).
 - **`app/services/`** — logique métier sans FastAPI. Chaque service a son propre `_get_client()` (les clients OpenAI/Supabase sont créés à la demande, **pas** au niveau module, pour ne pas exiger les secrets à l'import).
 - **`app/schemas/`** — modèles Pydantic request/response par feature.
+- **`app/dependencies/auth.py`** — dépendance `get_current_user_id` : vérifie le JWT Supabase (HS256, audience `authenticated`) et retourne l'`UUID` de l'utilisateur (claim `sub`).
 
-### Les trois features
+### Features vision (LLM)
 
 | Endpoint | Router | Service(s) | Rôle |
 |---|---|---|---|
@@ -50,6 +51,26 @@ Pattern en 3 couches, une responsabilité par fichier :
 | `POST /api/wine-label-add` | `wine_add.py` | `wine_cellar.py` | Ajoute réellement le vin choisi à `user_cellar` (existant via `wine_id`, ou nouveau via `wine_data`) |
 
 Le workflow étiquette est en **deux temps** : `analysis` propose, `add` écrit. `analysis` ne touche jamais la BDD.
+
+### Features cave + profil (JWT requis)
+
+Ces endpoints existent pour que l'app Flutter cesse d'accéder à Supabase en direct sur les données métier. **L'auth Supabase reste côté client** ; le backend ne fait que vérifier le JWT.
+
+| Endpoint | Router | Rôle |
+|---|---|---|
+| `GET /api/cellar` | `cellar.py` | Liste la cave (liste de rows `user_cellar`) |
+| `GET /api/cellar/last` | `cellar.py` | Dernier vin ajouté (404 si cave vide) |
+| `POST /api/cellar` | `cellar.py` | Ajoute un vin catalogue (`wine_id`) ou custom (`custom_*`) → 201 |
+| `DELETE /api/cellar/{cellar_id}` | `cellar.py` | Retire une bouteille → 204 |
+| `PATCH /api/cellar/{cellar_id}/stock` | `cellar.py` | Met à jour le stock |
+| `PATCH /api/profile` | `profile.py` | MAJ `niveau`/`preference`/`objectif` |
+| `DELETE /api/account` | `profile.py` | **Vraie** suppression du compte auth (`auth.admin.delete_user`) ; les tables liées partent par cascade FK → 204 |
+
+**Règles non négociables de ces endpoints :**
+- L'`user_id` provient **uniquement du JWT** (`Depends(get_current_user_id)`), jamais du body/query. Une ressource non possédée → **404** (jamais 403, pour ne pas divulguer son existence).
+- **Contrat de forme (important)** : les lectures cave renvoient les **rows `user_cellar` Supabase brutes** avec l'objet `wines` imbriqué (PostgREST `select("*, wines(*)")`), pour rester iso avec le parser Flutter `WineModel.fromCellarJson`. Ne **pas** envelopper dans un `response_model` qui renommerait/filtrerait les clés. `wines` vaut `null` pour un vin custom.
+
+> Dette connue (hors périmètre) : `/api/wine-label-*` et `/api/wine-label-add` prennent encore `user_id` dans le body et ne sont **pas** authentifiés. À migrer vers `get_current_user_id` à terme.
 
 ### Flux image (pairing & label)
 
@@ -61,7 +82,17 @@ Cascade de 5 niveaux de matching sur la table `wines` (130k+ vins), du plus pré
 
 ### Base de données (Supabase)
 
-Tables principales : `wines` (catalogue) et `user_cellar` (cave par utilisateur). Le schéma détaillé est accessible via le **MCP Supabase** — l'utiliser pour vérifier les colonnes avant toute modification touchant la base. `wine_cellar.create_wine` mappe explicitement chaque colonne de `wines`.
+Projet `WineMind` (`ibjnyfvihtdbpdtieegr`, région eu-west-1, Postgres 17). RLS activé + policies owner sur toutes les tables. Toutes les FK `user_id → auth.users` sont en `ON DELETE CASCADE` (la suppression du compte auth nettoie automatiquement `profiles`/`user_cellar`/`dish_pictures`/`wine_labels`). Schéma du schéma `public` :
+
+**`wines`** — catalogue de vins (PK `id` uuid). Colonnes : `name` (text, requis), `winery`, `year` (int), `region`, `region_2`, `province`, `country`, `variety`, `type` (text, défaut `'Rouge'`), `description`, `designation`, `points` (int, défaut 0), `price` (float8), `alcohol_percentage` (float8, nullable), `body_level`/`tannin_level`/`fruit_level` (float8, défaut 0.5), `food_pairings` (text[]), `stock` (int, défaut 0), `location` (text), `image_url` (text), `created_at`/`updated_at` (timestamptz).
+
+**`user_cellar`** — cave d'un utilisateur (PK `id` uuid). FK `wine_id → wines.id`, `user_id → auth.users.id`. Référence un vin du catalogue OU stocke un vin perso via les colonnes `custom_*` (`custom_name`, `custom_year` *text*, `custom_type`, `custom_region`, `custom_points`, `custom_description`, `custom_variety`, `custom_winery`, `custom_price`). Autres colonnes : `stock` (int, défaut 1), `rating` (float8), `apogee` (text), `notes`, `location`, `purchase_date` (date), `purchase_price` (float8), `created_at`/`updated_at`.
+
+**`profiles`** — profil utilisateur, PK `id` = `auth.users.id`. Colonnes : `email`, `prenom`, `nom`, `niveau`, `preference`, `objectif`, `created_at`.
+
+**`dish_pictures`** / **`wine_labels`** — métadonnées des images uploadées (`user_id → auth.users.id`, `file_name`, `file_path`, `created_at`). `file_path` est le chemin passé aux endpoints pour générer la signed URL.
+
+Toujours valider les colonnes via le **MCP Supabase** (`list_tables` verbose) avant une modification touchant la base. `wine_cellar.create_wine` mappe explicitement chaque colonne de `wines` ; `add_to_user_cellar` accepte `wine_id` nullable + tous les champs `custom_*`/`rating`/`apogee`/`purchase_*` via son paramètre `extra`.
 
 ## Conventions & pièges
 

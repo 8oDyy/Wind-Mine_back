@@ -154,6 +154,7 @@ def create_wine(wine_data: dict) -> dict:
         "country": wine_data.get("country"),
         "variety": wine_data.get("variety"),
         "type": wine_data.get("type", "Rouge"),
+        "alcohol_percentage": wine_data.get("alcohol_percentage"),
         "description": wine_data.get("description"),
         "designation": wine_data.get("designation"),
         "province": wine_data.get("province"),
@@ -175,36 +176,164 @@ def create_wine(wine_data: dict) -> dict:
         raise RuntimeError("Erreur lors de la création du vin") from e
 
 
-def add_to_user_cellar(user_id: UUID, wine_id: UUID, stock: int = 1, 
-                      notes: Optional[str] = None, location: Optional[str] = None) -> dict:
+# Colonnes "custom_*" et métadonnées libres acceptées à l'insertion d'une entrée de cave.
+_CELLAR_OPTIONAL_FIELDS = (
+    "rating", "apogee", "notes", "location", "purchase_date", "purchase_price",
+    "custom_name", "custom_year", "custom_type", "custom_region", "custom_points",
+    "custom_description", "custom_price", "custom_variety", "custom_winery",
+)
+
+
+def add_to_user_cellar(
+    user_id: UUID,
+    wine_id: Optional[UUID] = None,
+    stock: int = 1,
+    notes: Optional[str] = None,
+    location: Optional[str] = None,
+    extra: Optional[dict] = None,
+) -> dict:
     """Ajoute un vin à la cave de l'utilisateur.
-    
+
+    Supporte un vin du catalogue (`wine_id` fourni) OU un vin "custom"
+    (`wine_id=None`, infos portées par les champs `custom_*` passés dans `extra`).
+
     Args:
-        user_id: ID de l'utilisateur
-        wine_id: ID du vin
-        stock: Quantité
-        notes: Notes personnelles
-        location: Emplacement
-        
+        user_id: ID de l'utilisateur (provient toujours du JWT côté router).
+        wine_id: ID du vin catalogue, ou None pour un vin custom.
+        stock: Quantité.
+        notes: Notes personnelles (raccourci ; peut aussi venir d'`extra`).
+        location: Emplacement (raccourci ; peut aussi venir d'`extra`).
+        extra: Champs optionnels supplémentaires (rating, apogee, purchase_*, custom_*).
+
     Returns:
-        Entrée dans user_cellar
+        Entrée brute insérée dans user_cellar (sans jointure wines).
     """
     client = _get_client()
-    
-    cellar_entry = {
+
+    cellar_entry: dict = {
         "user_id": str(user_id),
-        "wine_id": str(wine_id),
+        "wine_id": str(wine_id) if wine_id else None,
         "stock": stock,
-        "notes": notes,
-        "location": location
     }
-    
+    if notes is not None:
+        cellar_entry["notes"] = notes
+    if location is not None:
+        cellar_entry["location"] = location
+
+    if extra:
+        for field in _CELLAR_OPTIONAL_FIELDS:
+            if field in extra and extra[field] is not None:
+                cellar_entry[field] = extra[field]
+
     try:
         response = client.table("user_cellar").insert(cellar_entry).execute()
         return response.data[0]
     except Exception as e:
         logger.error("Erreur ajout cave utilisateur: %s", e)
         raise RuntimeError("Erreur lors de l'ajout à la cave") from e
+
+
+def list_user_cellar(user_id: UUID) -> list[dict]:
+    """Liste la cave d'un utilisateur, vin catalogue imbriqué (`wines`).
+
+    Returns:
+        Liste de rows `user_cellar` (avec clé `wines` = objet ou None),
+        triées par date d'ajout décroissante. Liste vide si cave vide.
+    """
+    client = _get_client()
+    try:
+        response = (
+            client.table("user_cellar")
+            .select("*, wines(*)")
+            .eq("user_id", str(user_id))
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return response.data or []
+    except Exception as e:
+        logger.error("Erreur lecture cave utilisateur: %s", e)
+        raise RuntimeError("Erreur lors de la lecture de la cave") from e
+
+
+def get_last_cellar_wine(user_id: UUID) -> Optional[dict]:
+    """Retourne la dernière entrée de cave ajoutée, ou None si la cave est vide."""
+    client = _get_client()
+    try:
+        response = (
+            client.table("user_cellar")
+            .select("*, wines(*)")
+            .eq("user_id", str(user_id))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error("Erreur lecture dernier vin de cave: %s", e)
+        raise RuntimeError("Erreur lors de la lecture de la cave") from e
+
+
+def get_cellar_entry(user_id: UUID, cellar_id: UUID) -> Optional[dict]:
+    """Retourne une entrée de cave (vin imbriqué) si elle appartient à l'utilisateur."""
+    client = _get_client()
+    try:
+        response = (
+            client.table("user_cellar")
+            .select("*, wines(*)")
+            .eq("id", str(cellar_id))
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error("Erreur lecture entrée de cave: %s", e)
+        raise RuntimeError("Erreur lors de la lecture de l'entrée de cave") from e
+
+
+def delete_cellar_entry(user_id: UUID, cellar_id: UUID) -> bool:
+    """Supprime une entrée de cave possédée par l'utilisateur.
+
+    Returns:
+        True si une ligne a été supprimée, False sinon (inexistante / autre user).
+    """
+    client = _get_client()
+    try:
+        response = (
+            client.table("user_cellar")
+            .delete()
+            .eq("id", str(cellar_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        return bool(response.data)
+    except Exception as e:
+        logger.error("Erreur suppression entrée de cave: %s", e)
+        raise RuntimeError("Erreur lors de la suppression de l'entrée de cave") from e
+
+
+def update_cellar_stock(user_id: UUID, cellar_id: UUID, stock: int) -> Optional[dict]:
+    """Met à jour le stock d'une entrée possédée par l'utilisateur.
+
+    Returns:
+        L'entrée mise à jour (vin imbriqué), ou None si non possédée / inexistante.
+    """
+    client = _get_client()
+    try:
+        response = (
+            client.table("user_cellar")
+            .update({"stock": stock})
+            .eq("id", str(cellar_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        if not response.data:
+            return None
+        # Re-SELECT pour renvoyer la forme complète avec wines(*) imbriqué.
+        return get_cellar_entry(user_id, cellar_id)
+    except Exception as e:
+        logger.error("Erreur mise à jour stock de cave: %s", e)
+        raise RuntimeError("Erreur lors de la mise à jour du stock") from e
 
 
 def get_wine_with_cellar_info(cellar_entry: dict) -> Tuple[dict, dict]:
