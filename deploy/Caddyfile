@@ -1,0 +1,9 @@
+# Reverse proxy WineMind — HTTPS automatique (Let's Encrypt via Caddy).
+winemind.fr {
+	encode gzip
+	reverse_proxy api:8000
+}
+
+www.winemind.fr {
+	redir https://winemind.fr{uri} permanent
+}
