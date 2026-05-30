@@ -28,7 +28,7 @@ docker compose up --build
 
 ## Configuration (.env)
 
-Variables requises (voir `.env.example`) : `CHAT_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET_NAME`, `SUPABASE_WINE_LABELS_BUCKET`, `VISION_MODEL`, `SUPABASE_JWT_SECRET` (Dashboard → Settings → API → JWT Secret, legacy HS256 ; sert à vérifier les access tokens des endpoints authentifiés).
+Variables requises (voir `.env.example`) : `CHAT_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET_NAME`, `SUPABASE_WINE_LABELS_BUCKET`, `VISION_MODEL`, `SUPABASE_JWT_SECRET` (legacy HS256, Dashboard → Settings → API ; repli optionnel — les tokens ES256 sont vérifiés via le JWKS dérivé de `SUPABASE_URL`).
 
 **Provider LLM** : le projet utilise **OpenAI direct via `CHAT_API_KEY`**. Le code supporte aussi un fallback `GITHUB_TOKEN` (GitHub Models sur `models.inference.ai.azure.com`) mais ce n'est pas le mode utilisé. Au démarrage, `app.main` **lève une RuntimeError si aucune clé n'est présente** — c'est pourquoi `tests/test_health.py` injecte des variables factices *avant* d'importer l'app.
 
@@ -40,7 +40,7 @@ Pattern en 3 couches, une responsabilité par fichier :
 - **`app/routers/`** — un router par feature, préfixe `/api`. Orchestrent : signed URL → analyse → validation Pydantic → réponse. Toute la gestion d'erreurs HTTP vit ici (mapping RuntimeError→502, ValueError→502, config manquante→500).
 - **`app/services/`** — logique métier sans FastAPI. Chaque service a son propre `_get_client()` (les clients OpenAI/Supabase sont créés à la demande, **pas** au niveau module, pour ne pas exiger les secrets à l'import).
 - **`app/schemas/`** — modèles Pydantic request/response par feature.
-- **`app/dependencies/auth.py`** — dépendance `get_current_user_id` : vérifie le JWT Supabase (HS256, audience `authenticated`) et retourne l'`UUID` de l'utilisateur (claim `sub`).
+- **`app/dependencies/auth.py`** — dépendance `get_current_user_id` : vérifie le JWT Supabase et retourne l'`UUID` de l'utilisateur (claim `sub`, audience `authenticated`). Le projet a migré vers les **JWT Signing Keys asymétriques** : les tokens sont signés en **ES256** et vérifiés via le **JWKS public** (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`, `PyJWKClient` avec cache). Le legacy secret HS256 (`SUPABASE_JWT_SECRET`) n'est qu'un repli pour d'anciens tokens. Nécessite `pyjwt[crypto]` (package `cryptography` pour ES256).
 
 ### Features vision (LLM)
 
