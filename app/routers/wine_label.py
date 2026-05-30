@@ -225,7 +225,7 @@ async def wine_label_analysis(request: WineLabelRequest):
             "alcohol_percentage": wine_data.get("alcohol_percentage"),
             "description": wine_data.get("description"),
             "designation": wine_data.get("designation"),
-            "sub_region": wine_data.get("sub_region"),
+            "province": wine_data.get("province"),
             "confidence": wine_data.get("confidence", 0.0)
         }
         
