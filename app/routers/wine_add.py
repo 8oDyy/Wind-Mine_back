@@ -1,7 +1,9 @@
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.dependencies.auth import get_current_user_id
 from app.schemas.wine_add import WineAddRequest, WineAddResponse, WineAddError
 from app.services.wine_cellar import create_wine, add_to_user_cellar, get_wine_with_cellar_info
 
@@ -15,14 +17,18 @@ router = APIRouter(prefix="/api", tags=["wine-add"])
     response_model=WineAddResponse,
     responses={
         400: {"model": WineAddError},
+        401: {"model": WineAddError},
         422: {"model": WineAddError},
         500: {"model": WineAddError},
     },
 )
-async def add_wine_to_cellar(request: WineAddRequest):
+async def add_wine_to_cellar(
+    request: WineAddRequest,
+    user_id: UUID = Depends(get_current_user_id),
+):
     """Ajoute un vin à la cave de l'utilisateur.
-    
-    Soit un vin existant (wine_id), soit un nouveau vin (wine_data).
+
+    L'utilisateur provient du JWT. Soit un vin existant (wine_id), soit un nouveau vin (wine_data).
     """
     # Validation des entrées
     if not request.wine_id and not request.wine_data:
@@ -43,13 +49,13 @@ async def add_wine_to_cellar(request: WineAddRequest):
         
         if request.wine_id:
             # Ajouter un vin existant
-            logger.info(f"Ajout vin existant {request.wine_id} à la cave de {request.user_id}")
+            logger.info(f"Ajout vin existant {request.wine_id} à la cave de {user_id}")
             wine_id_to_add = request.wine_id
             message = f"Vin existant ajouté à votre cave avec succès !"
-        
+
         else:
             # Créer un nouveau vin puis l'ajouter
-            logger.info(f"Création nouveau vin et ajout à la cave de {request.user_id}")
+            logger.info(f"Création nouveau vin et ajout à la cave de {user_id}")
             new_wine = create_wine(request.wine_data)
             wine_id_to_add = new_wine["id"]
             wine_added = True
@@ -57,7 +63,7 @@ async def add_wine_to_cellar(request: WineAddRequest):
         
         # Ajouter à la cave de l'utilisateur
         cellar_wine_entry = add_to_user_cellar(
-            user_id=request.user_id,
+            user_id=user_id,
             wine_id=wine_id_to_add,
             stock=request.stock,
             notes=request.custom_notes,

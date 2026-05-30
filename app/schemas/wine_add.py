@@ -4,7 +4,6 @@ from uuid import UUID
 
 
 class WineAddRequest(BaseModel):
-    user_id: UUID = Field(..., description="ID de l'utilisateur")
     wine_id: Optional[UUID] = Field(None, description="ID du vin existant (si existant)")
     wine_data: Optional[dict] = Field(None, description="Données du nouveau vin (si nouveau)")
     stock: int = Field(1, ge=0, description="Quantité à ajouter")
