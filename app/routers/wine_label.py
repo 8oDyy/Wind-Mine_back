@@ -1,7 +1,9 @@
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.dependencies.auth import get_current_user_id
 from app.schemas.wine_label import (
     WineLabelRequest,
     WineLabelResponse,
@@ -132,11 +134,16 @@ def _clean_wine_data(wine_data: dict) -> dict:
     response_model=WineLabelResponse,
     responses={
         400: {"model": WineLabelError},
+        401: {"model": WineLabelError},
         422: {"model": WineLabelError},
         502: {"model": WineLabelError},
     },
 )
-async def wine_label_analysis(request: WineLabelRequest):
+async def wine_label_analysis(
+    request: WineLabelRequest,
+    _user_id: UUID = Depends(get_current_user_id),
+):
+    # JWT requis : l'analyse n'écrit pas en base mais déclenche un appel LLM coûteux.
     file_path = request.file_path.strip()
     if not file_path:
         raise HTTPException(

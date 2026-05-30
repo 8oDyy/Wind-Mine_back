@@ -5,7 +5,6 @@ from uuid import UUID
 
 class WineLabelRequest(BaseModel):
     file_path: str = Field(..., min_length=1, description="Chemin de l'image de l'étiquette dans le bucket Supabase")
-    user_id: UUID = Field(..., description="ID de l'utilisateur qui ajoute la bouteille")
     custom_notes: Optional[str] = Field(None, description="Notes personnelles sur la bouteille")
     stock: int = Field(1, ge=0, description="Quantité à ajouter dans la cave")
     location: Optional[str] = Field(None, description="Emplacement dans la cave")

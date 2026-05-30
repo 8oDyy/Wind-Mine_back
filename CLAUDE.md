@@ -44,13 +44,13 @@ Pattern en 3 couches, une responsabilité par fichier :
 
 ### Features vision (LLM)
 
-| Endpoint | Router | Service(s) | Rôle |
-|---|---|---|---|
-| `POST /api/wine-pairing` | `wine_pairing.py` | `vision.py` | Photo de plat → 3 styles de vins (jamais de marque précise) |
-| `POST /api/wine-label-analysis` | `wine_label.py` | `wine_analysis.py` + `wine_cellar.py` | Photo d'étiquette → 2 propositions (vin existant + nouveau), **sans écrire en base** |
-| `POST /api/wine-label-add` | `wine_add.py` | `wine_cellar.py` | Ajoute réellement le vin choisi à `user_cellar` (existant via `wine_id`, ou nouveau via `wine_data`) |
+| Endpoint | Router | Service(s) | Auth | Rôle |
+|---|---|---|---|---|
+| `POST /api/wine-pairing` | `wine_pairing.py` | `vision.py` | — | Photo de plat → 3 styles de vins (jamais de marque précise) |
+| `POST /api/wine-label-analysis` | `wine_label.py` | `wine_analysis.py` + `wine_cellar.py` | JWT | Photo d'étiquette → 2 propositions (vin existant + nouveau), **sans écrire en base** |
+| `POST /api/wine-label-add` | `wine_add.py` | `wine_cellar.py` | JWT | Ajoute réellement le vin choisi à `user_cellar` (existant via `wine_id`, ou nouveau via `wine_data`) |
 
-Le workflow étiquette est en **deux temps** : `analysis` propose, `add` écrit. `analysis` ne touche jamais la BDD.
+Le workflow étiquette est en **deux temps** : `analysis` propose, `add` écrit. `analysis` ne touche jamais la BDD. Les deux endpoints étiquette sont **authentifiés par JWT** ; comme pour la cave, l'`user_id` provient du token (`get_current_user_id`), plus jamais du body. `wine-pairing` reste public (aucune donnée utilisateur).
 
 ### Features cave + profil (JWT requis)
 
@@ -70,7 +70,6 @@ Ces endpoints existent pour que l'app Flutter cesse d'accéder à Supabase en di
 - L'`user_id` provient **uniquement du JWT** (`Depends(get_current_user_id)`), jamais du body/query. Une ressource non possédée → **404** (jamais 403, pour ne pas divulguer son existence).
 - **Contrat de forme (important)** : les lectures cave renvoient les **rows `user_cellar` Supabase brutes** avec l'objet `wines` imbriqué (PostgREST `select("*, wines(*)")`), pour rester iso avec le parser Flutter `WineModel.fromCellarJson`. Ne **pas** envelopper dans un `response_model` qui renommerait/filtrerait les clés. `wines` vaut `null` pour un vin custom.
 
-> Dette connue (hors périmètre) : `/api/wine-label-*` et `/api/wine-label-add` prennent encore `user_id` dans le body et ne sont **pas** authentifiés. À migrer vers `get_current_user_id` à terme.
 
 ### Flux image (pairing & label)
 

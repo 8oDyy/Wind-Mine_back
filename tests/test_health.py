@@ -47,12 +47,15 @@ def test_openapi_routes_present():
 
 
 def test_protected_endpoints_require_jwt():
-    """Sans en-tête Authorization, les endpoints cave/profil renvoient 401."""
+    """Sans en-tête Authorization, les endpoints protégés renvoient 401."""
     assert client.get("/api/cellar").status_code == 401
     assert client.get("/api/cellar/last").status_code == 401
     assert client.post("/api/cellar", json={"stock": 1}).status_code == 401
     assert client.patch("/api/profile", json={}).status_code == 401
     assert client.delete("/api/account").status_code == 401
+    # Endpoints étiquette désormais authentifiés (user_id n'est plus dans le body).
+    assert client.post("/api/wine-label-analysis", json={"file_path": "labels/x.jpg"}).status_code == 401
+    assert client.post("/api/wine-label-add", json={}).status_code == 401
 
 
 def test_invalid_jwt_rejected():
