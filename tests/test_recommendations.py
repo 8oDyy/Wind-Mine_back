@@ -29,7 +29,7 @@ _USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 # Contexte cave "vide" complet (toutes les clés attendues par _build_category_specs).
 _EMPTY_CELLAR = {
     "owned_wine_ids": [], "owned_regions": [],
-    "dominant_region": None, "dominant_type": None, "budget": None,
+    "dominant_region": None, "dominant_type": None,
 }
 
 
@@ -42,12 +42,6 @@ def client_authed():
 
 
 # ─────────────────────────── Logique pure du service ───────────────────────────
-
-def test_median_odd_even():
-    assert svc._median([10.0]) == 10.0
-    assert svc._median([30.0, 10.0, 20.0]) == 20.0
-    assert svc._median([10.0, 20.0, 30.0, 40.0]) == 25.0
-
 
 def test_normalize_deaccents():
     assert svc._normalize("  Vin Pétillant ") == "vin petillant"
@@ -85,7 +79,7 @@ def test_preferred_type_priority():
 
 
 def test_build_specs_fallback_profile_vide():
-    """Profil + cave vides : pas de for_you/region, mais top_rated + affordable + types + discover."""
+    """Profil + cave vides : pas de for_you/region, mais top_rated + affordable + types + discover + prestige."""
     specs = svc._build_category_specs(profile={}, cellar=_EMPTY_CELLAR, limit=12)
     keys = [s["key"] for s in specs]
     assert "for_you" not in keys
@@ -93,9 +87,53 @@ def test_build_specs_fallback_profile_vide():
     assert "top_rated" in keys
     assert "affordable" in keys
     assert "discover" in keys
+    assert "prestige" in keys
+    assert keys[-1] == "prestige"  # rangée prestige toujours en bas
     # Au plus _MAX_TYPE_CATEGORIES carrousels "par type".
     type_keys = [k for k in keys if k in {"red", "white", "sparkling", "rose"}]
     assert 0 < len(type_keys) <= svc._MAX_TYPE_CATEGORIES
+
+
+def test_build_specs_price_caps():
+    """Cible produit : grand public ≈ 20 (cap 30), `affordable` ≤ 15 trié prix croissant,
+    une SEULE rangée hors plafond (`prestige`). On inspecte les params PostgREST réels.
+    """
+    from postgrest import SyncPostgrestClient
+
+    pg = SyncPostgrestClient("http://localhost/rest/v1", schema="public", headers={"apikey": "x"})
+
+    class _C:
+        def table(self, n):
+            return pg.table(n)
+
+    profile = {"preference": "Vin Rouge"}
+    cellar = {
+        "owned_wine_ids": ["a"], "owned_regions": ["Bordeaux"],
+        "dominant_region": "Bordeaux", "dominant_type": "Rouge",
+    }
+    uncapped = []
+    for spec in svc._build_category_specs(profile, cellar, limit=12):
+        params = dict(spec["build"](_C()).params)
+        price = params.get("price")
+        if spec["key"] == "prestige":
+            assert price is None  # seule rangée chère assumée : aucun plafond
+            assert params.get("points") == f"gte.{svc._PRESTIGE_MIN_POINTS}"
+            uncapped.append(spec["key"])
+        elif spec["key"] == "affordable":
+            # Vraiment cheap : plafond bas dédié + tri par PRIX CROISSANT
+            # (PostgREST encode l'ordre ascendant sans suffixe : `order=price`).
+            assert price == f"lte.{svc._AFFORDABLE_MAX_PRICE}"
+            assert params.get("order") == "price"
+            assert params.get("points") == f"gte.{svc._AFFORDABLE_MIN_POINTS}"
+        else:
+            # Toutes les autres rangées sont plafonnées au prix grand public (30).
+            assert price == f"lte.{svc._MAX_EVERYDAY_PRICE}", f"{spec['key']} non plafonné: {price}"
+            assert spec["key"] != "prestige"
+
+    # Exactement UNE rangée sans plafond, et c'est prestige.
+    assert uncapped == ["prestige"]
+    assert svc._MAX_EVERYDAY_PRICE == 30.0
+    assert svc._AFFORDABLE_MAX_PRICE <= 15.0
 
 
 def test_build_specs_personalized():
@@ -103,7 +141,7 @@ def test_build_specs_personalized():
     profile = {"preference": "J'aime le rouge"}
     cellar = {
         "owned_wine_ids": ["a"], "owned_regions": ["Bordeaux"],
-        "dominant_region": "Bordeaux", "dominant_type": "Rouge", "budget": 15.0,
+        "dominant_region": "Bordeaux", "dominant_type": "Rouge",
     }
     specs = svc._build_category_specs(profile, cellar, limit=12)
     keys = [s["key"] for s in specs]
@@ -173,7 +211,7 @@ def test_get_recommendations_excludes_cellar(monkeypatch):
     monkeypatch.setattr(svc, "_fetch_profile", lambda c, u: {"preference": "rouge"})
     monkeypatch.setattr(svc, "_fetch_cellar_context", lambda c, u: {
         "owned_wine_ids": owned, "owned_regions": [],
-        "dominant_region": None, "dominant_type": "Rouge", "budget": None,
+        "dominant_region": None, "dominant_type": "Rouge",
     })
     # _run renvoie le catalogue moins les ids exclus collectés par le faux query.
     monkeypatch.setattr(svc, "_run", lambda q: [w for w in catalog if w["id"] not in q.excluded])
