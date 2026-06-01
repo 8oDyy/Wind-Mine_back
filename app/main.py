@@ -15,6 +15,7 @@ from app.routers.wine_add import router as wine_add_router
 from app.routers.wine_enrich import router as wine_enrich_router
 from app.routers.cellar import router as cellar_router
 from app.routers.profile import router as profile_router
+from app.routers.recommendations import router as recommendations_router
 
 CHAT_API_KEY = os.getenv("CHAT_API_KEY")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -53,6 +54,7 @@ app.include_router(wine_add_router)
 app.include_router(wine_enrich_router)
 app.include_router(cellar_router)
 app.include_router(profile_router)
+app.include_router(recommendations_router)
 
 
 class ChatMessage(BaseModel):

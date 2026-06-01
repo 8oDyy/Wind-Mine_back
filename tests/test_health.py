@@ -42,6 +42,7 @@ def test_openapi_routes_present():
         "/api/profile",
         "/api/account",
         "/api/wine/{wine_id}/enrich",
+        "/api/discovery",
     )
     for expected in expected_routes:
         assert expected in paths, f"route manquante: {expected}"
@@ -61,6 +62,8 @@ def test_protected_endpoints_require_jwt():
     assert client.post(
         "/api/wine/00000000-0000-0000-0000-000000000000/enrich"
     ).status_code == 401
+    # Découvertes : personnalisées => JWT requis.
+    assert client.get("/api/discovery").status_code == 401
 
 
 def test_invalid_jwt_rejected():
