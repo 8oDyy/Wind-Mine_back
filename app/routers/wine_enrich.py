@@ -15,7 +15,7 @@ appel LLM.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.dependencies.auth import get_current_user_id
 from app.schemas.wine_enrich import WineEnrichResponse, WineEnrichError
@@ -89,9 +89,14 @@ def _clean_enrichment(data: dict) -> dict:
 )
 async def enrich_wine(
     wine_id: UUID,
+    force: bool = Query(False, description="Régénère même si le vin est déjà enrichi (ignore enriched_at)"),
     _user_id: UUID = Depends(get_current_user_id),
 ):
-    """Enrichit un vin du catalogue (profil gustatif + accords + fenêtre de garde)."""
+    """Enrichit un vin du catalogue (profil gustatif + accords + fenêtre de garde).
+
+    Sans `force` : idempotent (vin déjà enrichi → renvoyé sans appel LLM).
+    Avec `force=true` : régénère via le LLM et repose `enriched_at`.
+    """
     try:
         wine = get_wine_by_id(wine_id)
     except RuntimeError as e:
@@ -101,8 +106,8 @@ async def enrich_wine(
     if wine is None:
         raise HTTPException(status_code=404, detail="Vin introuvable")
 
-    # Idempotence : enriched_at posé (primaire) ou données déjà présentes (filet) → pas de LLM.
-    if _already_enriched(wine):
+    # Idempotence (sauf force) : enriched_at posé (primaire) ou données déjà présentes (filet) → pas de LLM.
+    if not force and _already_enriched(wine):
         return WineEnrichResponse(enriched=False, wine=wine)
 
     # Générer l'enrichissement via le LLM (texte-only).
