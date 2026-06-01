@@ -41,6 +41,7 @@ def test_openapi_routes_present():
         "/api/cellar/{cellar_id}/stock",
         "/api/profile",
         "/api/account",
+        "/api/wine/{wine_id}/enrich",
     )
     for expected in expected_routes:
         assert expected in paths, f"route manquante: {expected}"
@@ -56,6 +57,10 @@ def test_protected_endpoints_require_jwt():
     # Endpoints étiquette désormais authentifiés (user_id n'est plus dans le body).
     assert client.post("/api/wine-label-analysis", json={"file_path": "labels/x.jpg"}).status_code == 401
     assert client.post("/api/wine-label-add", json={}).status_code == 401
+    # Enrichissement vin : JWT requis (appel LLM coûteux).
+    assert client.post(
+        "/api/wine/00000000-0000-0000-0000-000000000000/enrich"
+    ).status_code == 401
 
 
 def test_invalid_jwt_rejected():
