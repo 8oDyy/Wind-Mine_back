@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 from uuid import UUID
 
@@ -177,6 +178,62 @@ def create_wine(wine_data: dict) -> dict:
     except Exception as e:
         logger.error("Erreur création vin: %s", e)
         raise RuntimeError("Erreur lors de la création du vin") from e
+
+
+def get_wine_by_id(wine_id: UUID) -> Optional[dict]:
+    """Retourne la row catalogue `wines`, ou None si l'id n'existe pas."""
+    client = _get_client()
+    try:
+        response = (
+            client.table("wines")
+            .select("*")
+            .eq("id", str(wine_id))
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error("Erreur lecture vin: %s", e)
+        raise RuntimeError("Erreur lors de la lecture du vin") from e
+
+
+# Champs d'enrichissement oenologique mis à jour par l'endpoint d'enrichissement.
+_ENRICHMENT_FIELDS = (
+    "body_level", "tannin_level", "fruit_level",
+    "food_pairings", "drink_from", "peak_year", "drink_to",
+)
+
+
+def update_wine_enrichment(wine_id: UUID, enrichment: dict) -> Optional[dict]:
+    """Met à jour les champs d'enrichissement d'un vin du catalogue.
+
+    Seuls les champs de `_ENRICHMENT_FIELDS` présents et non-None sont écrits.
+    `enriched_at` est TOUJOURS posé à l'instant courant : c'est le marqueur
+    d'idempotence (« génération une seule fois ») relu à chaque appel suivant.
+
+    Returns:
+        La row `wines` à jour, ou None si l'id n'existe pas.
+    """
+    client = _get_client()
+
+    update_data = {
+        field: enrichment[field]
+        for field in _ENRICHMENT_FIELDS
+        if field in enrichment and enrichment[field] is not None
+    }
+    update_data["enriched_at"] = datetime.now(timezone.utc).isoformat()
+
+    try:
+        response = (
+            client.table("wines")
+            .update(update_data)
+            .eq("id", str(wine_id))
+            .execute()
+        )
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error("Erreur mise à jour enrichissement vin: %s", e)
+        raise RuntimeError("Erreur lors de la mise à jour du vin") from e
 
 
 # Colonnes "custom_*" et métadonnées libres acceptées à l'insertion d'une entrée de cave.
