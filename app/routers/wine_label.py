@@ -206,6 +206,10 @@ async def wine_label_analysis(
                 "country": similar_wine.get("country"),
                 "variety": similar_wine.get("variety"),
                 "type": similar_wine.get("type"),
+                "body_level": similar_wine.get("body_level"),
+                "tannin_level": similar_wine.get("tannin_level"),
+                "fruit_level": similar_wine.get("fruit_level"),
+                "food_pairings": similar_wine.get("food_pairings"),
                 "match_type": match_type,
                 "match_confidence": _get_match_confidence(match_type)
             }
@@ -233,6 +237,10 @@ async def wine_label_analysis(
             "description": wine_data.get("description"),
             "designation": wine_data.get("designation"),
             "province": wine_data.get("province"),
+            "body_level": wine_data.get("body_level"),
+            "tannin_level": wine_data.get("tannin_level"),
+            "fruit_level": wine_data.get("fruit_level"),
+            "food_pairings": wine_data.get("food_pairings"),
             "confidence": wine_data.get("confidence", 0.0)
         }
         
