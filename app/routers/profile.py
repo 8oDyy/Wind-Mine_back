@@ -29,7 +29,7 @@ async def patch_profile(
     request: ProfileUpdateRequest,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    """Met à jour les champs fournis du profil (niveau, preference, objectif)."""
+    """Met à jour les champs fournis du profil (niveau, preference, objectif, prenom, nom)."""
     try:
         profile = update_profile(user_id, request.model_dump(exclude_none=True))
     except RuntimeError as e:
