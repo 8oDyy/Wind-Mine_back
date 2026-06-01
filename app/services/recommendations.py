@@ -34,18 +34,21 @@ _WINE_SELECT = "*"
 
 # Seuils de qualité (sur la colonne `points`, échelle ~80-100 des données catalogue).
 _TOP_RATED_MIN_POINTS = 90
-_AFFORDABLE_MIN_POINTS = 88
-_AFFORDABLE_FALLBACK_PRICE = 20.0  # seuil "abordable" par défaut si la cave ne renseigne pas de prix.
+_AFFORDABLE_MIN_POINTS = 86  # rangée "Petits prix" : qualité correcte mais on relâche un peu pour aller chercher le vraiment cheap.
 
 # Plafond de prix « grand public » appliqué à TOUTES les rangées générales (for_you,
-# top_rated, region_*, par type, discover). Sans lui, `ORDER BY points DESC` remonte
-# systématiquement des trophées (Lafite, Salon, Krug… à plusieurs centaines) : le p90
-# du catalogue est ~70 (médiane 25). On borne donc à p90 pour des recos accessibles.
+# top_rated, region_*, par type, discover, affordable). Cible produit : la plupart des
+# vins ~20. Avec la corrélation prix↔points (tri `points DESC` pousse vers le plafond),
+# un cap à 30 fait atterrir les recos majoritairement en ~18-28 (centrées ~20). Garder
+# `points>=88` reste sûr : >17k vins en 20-30 à ≥88 pts.
 # NB PostgREST : `price <= MAX` exclut nativement les prix NULL (un `lte` ne matche pas
 # NULL) — c'est voulu : pas de prix inconnu dans les rangées grand public.
-_MAX_EVERYDAY_PRICE = 70.0
+_MAX_EVERYDAY_PRICE = 30.0
 
-# Rangée prestige assumée (placée en bas) : trophées éditorialisés, SANS plafond de prix.
+# Rangée "Petits prix" : vraiment cheap, triée par prix croissant (bonnes affaires 8-14).
+_AFFORDABLE_MAX_PRICE = 15.0
+
+# UNE seule rangée chère assumée (placée en bas) : trophées éditorialisés, SANS plafond.
 _PRESTIGE_MIN_POINTS = 96
 
 # Mapping libellé de préférence -> valeur de `wines.type`.
@@ -140,7 +143,7 @@ def _fetch_profile(client: Client, user_id: UUID) -> dict:
 
 
 def _fetch_cellar_context(client: Client, user_id: UUID) -> dict:
-    """Dérive du contenu de la cave : ids déjà possédés, région dominante, budget médian.
+    """Dérive du contenu de la cave : ids déjà possédés, région dominante, type dominant.
 
     Lecture légère (seules les colonnes utiles du vin imbriqué), bornée par user
     (index user_id). Tolérante : toute erreur => contexte vide (pas de perso cave).
@@ -148,7 +151,7 @@ def _fetch_cellar_context(client: Client, user_id: UUID) -> dict:
     try:
         response = (
             client.table("user_cellar")
-            .select("wine_id, wines(region, type, price)")
+            .select("wine_id, wines(region, type)")
             .eq("user_id", str(user_id))
             .execute()
         )
@@ -157,40 +160,28 @@ def _fetch_cellar_context(client: Client, user_id: UUID) -> dict:
         logger.warning("Lecture cave pour reco échouée (on continue sans perso): %s", e)
         return {
             "owned_wine_ids": [], "owned_regions": [],
-            "dominant_region": None, "dominant_type": None, "budget": None,
+            "dominant_region": None, "dominant_type": None,
         }
 
     owned_wine_ids = [r["wine_id"] for r in rows if r.get("wine_id")]
     regions = Counter()
     types = Counter()
-    prices: list[float] = []
     for r in rows:
         wine = r.get("wines") or {}
         if wine.get("region"):
             regions[wine["region"]] += 1
         if wine.get("type"):
             types[wine["type"]] += 1
-        if isinstance(wine.get("price"), (int, float)):
-            prices.append(float(wine["price"]))
 
     dominant_region = regions.most_common(1)[0][0] if regions else None
     dominant_type = types.most_common(1)[0][0] if types else None
-    budget = _median(prices) if prices else None
 
     return {
         "owned_wine_ids": owned_wine_ids,
         "owned_regions": list(regions.keys()),
         "dominant_region": dominant_region,
         "dominant_type": dominant_type,
-        "budget": budget,
     }
-
-
-def _median(values: list[float]) -> float:
-    s = sorted(values)
-    n = len(s)
-    mid = n // 2
-    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2
 
 
 # ─────────────────────────── Requêtes par catégorie ───────────────────────────
@@ -204,7 +195,7 @@ def _cap_price(query, cap: float = _MAX_EVERYDAY_PRICE):
     """Plafonne le prix d'une rangée « grand public » (exclut aussi les prix NULL).
 
     Empêche `ORDER BY points DESC` de remonter des trophées hors de prix. À ne PAS
-    appliquer à `affordable` (qui a son propre budget) ni à `prestige` (sans plafond).
+    appliquer à `affordable` (plafond bas dédié) ni à `prestige` (sans plafond).
     """
     return query.lte("price", cap)
 
@@ -299,14 +290,19 @@ def _build_category_specs(profile: dict, cellar: dict, limit: int) -> list[dict]
         "build": lambda c: _cap_price(_base_query(c, limit).gte("points", _TOP_RATED_MIN_POINTS)),
     })
 
-    # 4) Petits prix (budget = médiane prix cave si dispo, sinon seuil par défaut).
-    budget = cellar.get("budget") or _AFFORDABLE_FALLBACK_PRICE
+    # 4) Petits prix : la rangée la moins chère. Plafond fixe bas, qualité correcte,
+    # triée par PRIX CROISSANT pour faire remonter les vraies bonnes affaires (8-14)
+    # au lieu du cluster collé au plafond. (Distincte du grand public ~20.)
     specs.append({
         "key": "affordable",
         "title": "Petits prix",
-        "subtitle": f"Sous {int(budget)} €",
-        "build": lambda c, b=budget: (
-            _base_query(c, limit).lte("price", b).gte("points", _AFFORDABLE_MIN_POINTS)
+        "subtitle": f"Sous {int(_AFFORDABLE_MAX_PRICE)} €",
+        "build": lambda c: (
+            c.table("wines").select(_WINE_SELECT)
+            .gte("points", _AFFORDABLE_MIN_POINTS)
+            .lte("price", _AFFORDABLE_MAX_PRICE)
+            .order("price", desc=False)
+            .limit(limit)
         ),
     })
 
