@@ -211,6 +211,13 @@ def _map_preference(preference: Optional[str]) -> Optional[str]:
     """Mappe un libellé de préférence libre vers une valeur de `wines.type`, ou None.
 
     Match par sous-chaîne sur le libellé désaccentué (ex. « Vin Pétillant » -> 'Champagne').
+    `preference` est une multi-sélection jointe par « , » (ex. « Vin Rouge, Vin Blanc ») :
+    on renvoie le premier type dans l'ordre des règles `_PREFERENCE_SUBSTRING_TO_TYPE`.
+
+    NB (amélioration v2 possible) : ce « premier matché » suit l'ordre des règles, pas
+    l'ordre de saisie de l'utilisateur (« Vin Blanc, Vin Rouge » -> Rouge car Rouge est
+    testé avant Blanc). Déterministe et suffisant pour la pondération perso v1 ; pour
+    respecter l'ordre de saisie, splitter sur « , » et mapper token par token.
     """
     norm = _normalize(preference)
     if not norm:
