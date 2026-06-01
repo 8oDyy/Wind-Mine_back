@@ -85,7 +85,7 @@ def test_preferred_type_priority():
 
 
 def test_build_specs_fallback_profile_vide():
-    """Profil + cave vides : pas de for_you/region, mais top_rated + affordable + types + discover."""
+    """Profil + cave vides : pas de for_you/region, mais top_rated + affordable + types + discover + prestige."""
     specs = svc._build_category_specs(profile={}, cellar=_EMPTY_CELLAR, limit=12)
     keys = [s["key"] for s in specs]
     assert "for_you" not in keys
@@ -93,9 +93,42 @@ def test_build_specs_fallback_profile_vide():
     assert "top_rated" in keys
     assert "affordable" in keys
     assert "discover" in keys
+    assert "prestige" in keys
+    assert keys[-1] == "prestige"  # rangée prestige toujours en bas
     # Au plus _MAX_TYPE_CATEGORIES carrousels "par type".
     type_keys = [k for k in keys if k in {"red", "white", "sparkling", "rose"}]
     assert 0 < len(type_keys) <= svc._MAX_TYPE_CATEGORIES
+
+
+def test_build_specs_price_caps():
+    """Plafond grand public sur toutes les rangées sauf `affordable` (budget propre) et `prestige` (sans plafond).
+
+    On inspecte les params PostgREST réellement générés par chaque `build`.
+    """
+    from postgrest import SyncPostgrestClient
+
+    pg = SyncPostgrestClient("http://localhost/rest/v1", schema="public", headers={"apikey": "x"})
+
+    class _C:
+        def table(self, n):
+            return pg.table(n)
+
+    profile = {"preference": "Vin Rouge"}
+    cellar = {
+        "owned_wine_ids": ["a"], "owned_regions": ["Bordeaux"],
+        "dominant_region": "Bordeaux", "dominant_type": "Rouge", "budget": None,
+    }
+    for spec in svc._build_category_specs(profile, cellar, limit=12):
+        params = dict(spec["build"](_C()).params)
+        price = params.get("price")
+        if spec["key"] == "prestige":
+            assert price is None  # prestige assumé : aucun plafond
+            assert params.get("points") == f"gte.{svc._PRESTIGE_MIN_POINTS}"
+        elif spec["key"] == "affordable":
+            assert price == "lte.20.0"  # budget par défaut (cave sans prix)
+        else:
+            # Toutes les autres rangées sont plafonnées au prix grand public.
+            assert price == f"lte.{svc._MAX_EVERYDAY_PRICE}", f"{spec['key']} non plafonné: {price}"
 
 
 def test_build_specs_personalized():
