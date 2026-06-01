@@ -35,7 +35,18 @@ _WINE_SELECT = "*"
 # Seuils de qualité (sur la colonne `points`, échelle ~80-100 des données catalogue).
 _TOP_RATED_MIN_POINTS = 90
 _AFFORDABLE_MIN_POINTS = 88
-_AFFORDABLE_FALLBACK_PRICE = 20.0  # € : seuil "abordable" par défaut si la cave ne renseigne pas de prix.
+_AFFORDABLE_FALLBACK_PRICE = 20.0  # seuil "abordable" par défaut si la cave ne renseigne pas de prix.
+
+# Plafond de prix « grand public » appliqué à TOUTES les rangées générales (for_you,
+# top_rated, region_*, par type, discover). Sans lui, `ORDER BY points DESC` remonte
+# systématiquement des trophées (Lafite, Salon, Krug… à plusieurs centaines) : le p90
+# du catalogue est ~70 (médiane 25). On borne donc à p90 pour des recos accessibles.
+# NB PostgREST : `price <= MAX` exclut nativement les prix NULL (un `lte` ne matche pas
+# NULL) — c'est voulu : pas de prix inconnu dans les rangées grand public.
+_MAX_EVERYDAY_PRICE = 70.0
+
+# Rangée prestige assumée (placée en bas) : trophées éditorialisés, SANS plafond de prix.
+_PRESTIGE_MIN_POINTS = 96
 
 # Mapping libellé de préférence -> valeur de `wines.type`.
 # `profiles.preference` est un texte libre d'onboarding (ex. « Vin Pétillant »),
@@ -189,6 +200,15 @@ def _base_query(client: Client, limit: int):
     return client.table("wines").select(_WINE_SELECT).order("points", desc=True).limit(limit)
 
 
+def _cap_price(query, cap: float = _MAX_EVERYDAY_PRICE):
+    """Plafonne le prix d'une rangée « grand public » (exclut aussi les prix NULL).
+
+    Empêche `ORDER BY points DESC` de remonter des trophées hors de prix. À ne PAS
+    appliquer à `affordable` (qui a son propre budget) ni à `prestige` (sans plafond).
+    """
+    return query.lte("price", cap)
+
+
 def _exclude_owned(query, owned_wine_ids: list[str]):
     """Exclut les vins déjà en cave (PostgREST `not.in`), si la liste n'est pas vide.
 
@@ -246,7 +266,8 @@ def _build_category_specs(profile: dict, cellar: dict, limit: int) -> list[dict]
     region = cellar.get("dominant_region")
     specs: list[dict] = []
 
-    # 1) "Pour vous" : type préféré (profil sinon cave), hors vins possédés. Omise si pas de type.
+    # 1) "Pour vous" : type préféré (profil sinon cave), hors vins possédés, sous plafond
+    # grand public (sinon « Pour vous » en Champagne = Krug/Cristal/Salon à 250-617). Omise si pas de type.
     pref_type = _preferred_type(profile, cellar)
     if pref_type:
         specs.append({
@@ -254,26 +275,28 @@ def _build_category_specs(profile: dict, cellar: dict, limit: int) -> list[dict]
             "title": "Pour vous",
             "subtitle": "D'après vos goûts",
             "build": lambda c, t=pref_type: _exclude_owned(
-                _base_query(c, limit).eq("type", t).gte("points", _AFFORDABLE_MIN_POINTS),
+                _cap_price(_base_query(c, limit).eq("type", t).gte("points", _AFFORDABLE_MIN_POINTS)),
                 owned,
             ),
         })
 
-    # 2) Région dominante de la cave (hors vins possédés). Omise si cave vide.
+    # 2) Région dominante de la cave (hors vins possédés), sous plafond. Omise si cave vide.
     if region:
         specs.append({
             "key": f"region_{_slug(region)}",
             "title": f"À découvrir en {region}",
             "subtitle": "Comme dans votre cave",
-            "build": lambda c, r=region: _exclude_owned(_base_query(c, limit).eq("region", r), owned),
+            "build": lambda c, r=region: _exclude_owned(
+                _cap_price(_base_query(c, limit).eq("region", r)), owned
+            ),
         })
 
-    # 3) Mieux notés (global, repli universel — toujours présent).
+    # 3) Mieux notés (global, repli universel — toujours présent), sous plafond grand public.
     specs.append({
         "key": "top_rated",
         "title": "Les mieux notés",
         "subtitle": None,
-        "build": lambda c: _base_query(c, limit).gte("points", _TOP_RATED_MIN_POINTS),
+        "build": lambda c: _cap_price(_base_query(c, limit).gte("points", _TOP_RATED_MIN_POINTS)),
     })
 
     # 4) Petits prix (budget = médiane prix cave si dispo, sinon seuil par défaut).
@@ -299,14 +322,15 @@ def _build_category_specs(profile: dict, cellar: dict, limit: int) -> list[dict]
             "key": key,
             "title": title,
             "subtitle": None,
-            "build": lambda c, t=wine_type: _base_query(c, limit).eq("type", t),
+            "build": lambda c, t=wine_type: _cap_price(_base_query(c, limit).eq("type", t)),
         })
         added_types += 1
 
-    # 6) "À découvrir" : régions absentes de la cave (sinon catalogue diversifié), hors vins possédés.
+    # 6) "À découvrir" : régions absentes de la cave (sinon catalogue diversifié), hors vins
+    # possédés, sous plafond grand public.
     owned_regions = cellar.get("owned_regions") or []
     def _build_discover(c, regions=owned_regions):
-        q = _exclude_owned(_base_query(c, limit), owned)
+        q = _exclude_owned(_cap_price(_base_query(c, limit)), owned)
         # Exclut les régions déjà présentes en cave pour pousser la découverte.
         for r in regions[:50]:
             q = q.neq("region", r)
@@ -316,6 +340,15 @@ def _build_category_specs(profile: dict, cellar: dict, limit: int) -> list[dict]
         "title": "À découvrir",
         "subtitle": "Hors de vos sentiers habituels",
         "build": _build_discover,
+    })
+
+    # 7) "Prestige" (en bas) : trophées assumés, SANS plafond de prix. Choix éditorial
+    # plutôt que défaut. Très haut de gamme uniquement (points >= 96).
+    specs.append({
+        "key": "prestige",
+        "title": "Pour une grande occasion",
+        "subtitle": "Les vins d'exception",
+        "build": lambda c: _base_query(c, limit).gte("points", _PRESTIGE_MIN_POINTS),
     })
 
     return specs
