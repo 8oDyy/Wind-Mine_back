@@ -13,8 +13,8 @@ from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
-# Champs du profil modifiables via l'API (jamais id/email/prenom/nom ici).
-_PROFILE_UPDATABLE_FIELDS = ("niveau", "preference", "objectif")
+# Champs du profil modifiables via l'API (id/email restent exclus, jamais modifiables ici).
+_PROFILE_UPDATABLE_FIELDS = ("niveau", "preference", "objectif", "prenom", "nom")
 
 
 def _get_client() -> Client:
@@ -70,10 +70,32 @@ def update_profile(user_id: UUID, fields: dict) -> Optional[dict]:
         )
         if not response.data:
             return None
-        return get_profile(user_id)
     except Exception as e:
         logger.error("Erreur mise à jour profil: %s", e)
         raise RuntimeError("Erreur lors de la mise à jour du profil") from e
+
+    # La table `profiles` est la source de vérité, mais le front lit prenom/nom/etc.
+    # depuis les `user_metadata` de l'auth (rechargement de session). On y répercute
+    # donc les mêmes champs. Best-effort : un échec ne doit pas faire échouer le PATCH.
+    _sync_user_metadata(client, user_id, update_data)
+
+    return get_profile(user_id)
+
+
+def _sync_user_metadata(client: Client, user_id: UUID, fields: dict) -> None:
+    """Répercute `fields` dans les `user_metadata` de l'auth (merge, best-effort).
+
+    `update_user_by_id` REMPLACE l'objet `user_metadata` : on lit donc les metadata
+    courantes et on les fusionne pour ne perdre aucune clé existante. Toute erreur
+    est seulement loggée (la table `profiles` reste la source de vérité).
+    """
+    try:
+        current = client.auth.admin.get_user_by_id(str(user_id))
+        existing = dict(getattr(current.user, "user_metadata", None) or {})
+        existing.update(fields)
+        client.auth.admin.update_user_by_id(str(user_id), {"user_metadata": existing})
+    except Exception as e:
+        logger.warning("Sync user_metadata échoué (profil déjà à jour en base): %s", e)
 
 
 def delete_account(user_id: UUID) -> None:

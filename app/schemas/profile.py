@@ -13,6 +13,8 @@ class ProfileUpdateRequest(BaseModel):
     niveau: Optional[str] = Field(None, description="Niveau de connaissance en vin")
     preference: Optional[str] = Field(None, description="Préférences de l'utilisateur")
     objectif: Optional[str] = Field(None, description="Objectif de l'utilisateur")
+    prenom: Optional[str] = Field(None, description="Prénom de l'utilisateur")
+    nom: Optional[str] = Field(None, description="Nom de l'utilisateur")
 
 
 class ProfileError(BaseModel):
