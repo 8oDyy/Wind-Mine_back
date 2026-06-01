@@ -28,6 +28,9 @@ class WineAnalysis(BaseModel):
     tannin_level: Optional[float] = Field(None, ge=0.0, le=1.0)
     fruit_level: Optional[float] = Field(None, ge=0.0, le=1.0)
     food_pairings: Optional[list[str]]
+    drink_from: Optional[int] = Field(None, description="Début de la fenêtre de garde (année)")
+    peak_year: Optional[int] = Field(None, description="Année d'apogée")
+    drink_to: Optional[int] = Field(None, description="Fin de la fenêtre de garde (année)")
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 
@@ -74,6 +77,9 @@ class WineProposal(BaseModel):
     tannin_level: Optional[float] = Field(None, ge=0.0, le=1.0)
     fruit_level: Optional[float] = Field(None, ge=0.0, le=1.0)
     food_pairings: Optional[list[str]] = None
+    drink_from: Optional[int] = None
+    peak_year: Optional[int] = None
+    drink_to: Optional[int] = None
     match_type: Optional[str] = None  # Pour vin existant
     match_confidence: float = 0.0    # Pour vin existant
     confidence: float = 0.0          # Pour nouveau vin

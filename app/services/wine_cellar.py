@@ -164,6 +164,9 @@ def create_wine(wine_data: dict) -> dict:
         "tannin_level": wine_data.get("tannin_level", 0.5),
         "fruit_level": wine_data.get("fruit_level", 0.5),
         "food_pairings": wine_data.get("food_pairings"),
+        "drink_from": wine_data.get("drink_from"),
+        "peak_year": wine_data.get("peak_year"),
+        "drink_to": wine_data.get("drink_to"),
         "image_url": None  # Sera mis à jour plus tard si besoin
     }
     

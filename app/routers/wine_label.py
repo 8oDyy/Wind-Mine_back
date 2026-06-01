@@ -125,7 +125,20 @@ def _clean_wine_data(wine_data: dict) -> dict:
             cleaned["food_pairings"] = [str(item).strip() for item in food if str(item).strip()]
         else:
             cleaned["food_pairings"] = None
-    
+
+    # Nettoyer la fenêtre de garde (années entières, None si non déductible)
+    window_fields = ["drink_from", "peak_year", "drink_to"]
+    for field in window_fields:
+        if field in cleaned:
+            value = cleaned[field]
+            if isinstance(value, str) and value.lower() in ["non visible", "non spécifié", "n/a", ""]:
+                cleaned[field] = None
+            else:
+                try:
+                    cleaned[field] = int(value)
+                except (ValueError, TypeError):
+                    cleaned[field] = None
+
     return cleaned
 
 
@@ -210,6 +223,9 @@ async def wine_label_analysis(
                 "tannin_level": similar_wine.get("tannin_level"),
                 "fruit_level": similar_wine.get("fruit_level"),
                 "food_pairings": similar_wine.get("food_pairings"),
+                "drink_from": similar_wine.get("drink_from"),
+                "peak_year": similar_wine.get("peak_year"),
+                "drink_to": similar_wine.get("drink_to"),
                 "match_type": match_type,
                 "match_confidence": _get_match_confidence(match_type)
             }
@@ -241,6 +257,9 @@ async def wine_label_analysis(
             "tannin_level": wine_data.get("tannin_level"),
             "fruit_level": wine_data.get("fruit_level"),
             "food_pairings": wine_data.get("food_pairings"),
+            "drink_from": wine_data.get("drink_from"),
+            "peak_year": wine_data.get("peak_year"),
+            "drink_to": wine_data.get("drink_to"),
             "confidence": wine_data.get("confidence", 0.0)
         }
         

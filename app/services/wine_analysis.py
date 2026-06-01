@@ -20,7 +20,10 @@ WINE_LABEL_SYSTEM_PROMPT = (
     "- Sois précis sur les appellations, cépages, et classifications\n"
     "- Enrichis avec tes connaissances si nécessaire\n"
     "- Pour les niveaux (body, tannin, fruit), utilise des scores 0.0-1.0\n"
-    "- Pour food_pairings, liste 3-4 accords mets-vin pertinents\n\n"
+    "- Pour food_pairings, liste 3-4 accords mets-vin pertinents\n"
+    "- Pour la fenêtre de garde (drink_from, peak_year, drink_to), déduis des ANNÉES "
+    "(entiers) à partir du millésime et du type/cépage/région : drink_from = début de "
+    "la fenêtre optimale, peak_year = apogée, drink_to = fin de garde\n\n"
     "Format de réponse JSON OBLIGATOIRE :\n"
     "{\n"
     '  "chat_response": "Message expliquant l analyse et si ce vin semble exister déjà",\n'
@@ -42,6 +45,9 @@ WINE_LABEL_SYSTEM_PROMPT = (
     '    "tannin_level": 0.6,\n'
     '    "fruit_level": 0.8,\n'
     '    "food_pairings": ["Viande rouge", "Fromage", "Champignons"],\n'
+    '    "drink_from": 2023,\n'
+    '    "peak_year": 2028,\n'
+    '    "drink_to": 2035,\n'
     '    "confidence": 0.95\n'
     "  }\n"
     "}\n\n"
@@ -51,7 +57,10 @@ WINE_LABEL_SYSTEM_PROMPT = (
     '- points: note estimée 85-95 selon la qualité perçue\n'
     '- body_level: 0.3(léger)-0.7(medium)-0.9(puissant)\n'
     '- tannin_level: 0.2(faible)-0.6(moyen)-0.9(élevé)\n'
-    '- fruit_level: 0.3(discret)-0.7(équilibré)-0.9(puissant)\n\n'
+    '- fruit_level: 0.3(discret)-0.7(équilibré)-0.9(puissant)\n'
+    '- drink_from/peak_year/drink_to: fenêtre de garde plausible selon le millésime et '
+    'le potentiel de garde (vin léger à boire jeune = fenêtre courte ; grand vin de garde '
+    '= fenêtre longue). Toujours drink_from <= peak_year <= drink_to.\n\n'
     'En cas d\'étiquette totalement illisible :\n'
     '{"error": "label_unreadable", "detail": "explication"}'
 )
