@@ -15,7 +15,7 @@ api.chickenbowl.fr {
 	reverse_proxy melo-api:8000
 }
 
-staging.chickenbowl.fr {
+staging-api.chickenbowl.fr {
 	encode gzip
 	reverse_proxy melo-api-staging:8000
 }
