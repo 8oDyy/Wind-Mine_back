@@ -64,6 +64,7 @@ jobs:
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             'cd /home/'"${{ secrets.DEPLOY_USER }}"'/windmind && \
              docker compose -f deploy/docker-compose.yml up -d --build --remove-orphans && \
+             docker compose -f deploy/docker-compose.yml exec -T -w /etc/caddy caddy caddy reload && \
              docker compose -f deploy/docker-compose.yml ps'
 
       - name: Healthcheck public
