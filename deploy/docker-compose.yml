@@ -25,7 +25,17 @@ services:
       - caddy_config:/config
     depends_on:
       - api
+    networks:
+      # "edge" : réseau docker partagé du VPS — permet à caddy de joindre les
+      # conteneurs d'autres apps (ex. melo-api). Créé hors compose :
+      #   docker network create edge
+      - default
+      - edge
 
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  edge:
+    external: true

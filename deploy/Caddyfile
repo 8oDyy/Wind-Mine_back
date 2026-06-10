@@ -7,3 +7,15 @@ winemind.fr {
 www.winemind.fr {
 	redir https://winemind.fr{uri} permanent
 }
+
+# Reverse proxy Melo API — conteneurs déployés hors de ce compose
+# (repo 8oDyy/melo-backend), joints via le réseau docker partagé "edge".
+api.chickenbowl.fr {
+	encode gzip
+	reverse_proxy melo-api:8000
+}
+
+staging.chickenbowl.fr {
+	encode gzip
+	reverse_proxy melo-api-staging:8000
+}
