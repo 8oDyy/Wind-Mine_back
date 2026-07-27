@@ -19,3 +19,10 @@ staging-api.chickenbowl.fr {
 	encode gzip
 	reverse_proxy melo-api-staging:8000
 }
+
+# Reverse proxy Contrôle RCM / TELT — déploiement DEV, conteneurs hors de ce
+# compose (repo 8oDyy/lyon-turin-rcm), joints via le réseau docker partagé "edge".
+rcm.212-227-3-85.sslip.io {
+	encode gzip
+	reverse_proxy rcm-app:8080
+}
