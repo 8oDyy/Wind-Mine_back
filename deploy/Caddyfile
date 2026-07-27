@@ -26,3 +26,9 @@ rcm.212-227-3-85.sslip.io {
 	encode gzip
 	reverse_proxy rcm-app:8080
 }
+
+# Logs RCM (Dozzle) — auth gérée par Dozzle lui-même (/opt/rcm/dozzle/users.yml).
+logs.rcm.212-227-3-85.sslip.io {
+	encode gzip
+	reverse_proxy rcm-dozzle:8080
+}
