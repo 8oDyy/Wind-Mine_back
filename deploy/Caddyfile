@@ -32,3 +32,16 @@ logs.rcm.212-227-3-85.sslip.io {
 	encode gzip
 	reverse_proxy rcm-dozzle:8080
 }
+
+# Contrôle RCM / TELT — instance de DÉMONSTRATION (branche `demo` du même repo, projet compose
+# « rcm-demo », stack distincte de la dev : base, volumes, secrets séparés). Mêmes conventions.
+demo.rcm.212-227-3-85.sslip.io {
+	encode gzip
+	reverse_proxy rcm-demo-app:8080
+}
+
+# Logs de l'instance de démonstration (Dozzle, auth via /opt/rcm-demo/dozzle/users.yml).
+logs.demo.rcm.212-227-3-85.sslip.io {
+	encode gzip
+	reverse_proxy rcm-demo-dozzle:8080
+}
